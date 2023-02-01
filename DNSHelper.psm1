@@ -313,11 +313,15 @@ function Read-MXRecord {
                 $MXResults.MailProvider = Get-Content 'MailProviders\Null.json' | ConvertFrom-Json
             }
             else {
-                Get-ChildItem 'MailProviders' -Exclude '_template.json' | ForEach-Object {
-                    try {
-                        $Provider = Get-Content $_ | ConvertFrom-Json -ErrorAction Stop
-                        $MXRecords.Hostname | ForEach-Object {
-                            if ($_ -match $Provider.MxMatch) {
+                $ProviderList = Get-ChildItem 'MailProviders' -Exclude '_template.json' | ForEach-Object { 
+                    try { Get-Content $_ | ConvertFrom-Json -ErrorAction Stop } 
+                    catch {} 
+                }
+                foreach ($Record in $MXRecords) {
+                    $ProviderMatched = $false
+                    foreach ($Provider in $ProviderList) {
+                        try {
+                            if ($Record.Hostname -match $Provider.MxMatch) {
                                 $MXResults.MailProvider = $Provider
                                 if (($Provider.SpfReplace | Measure-Object | Select-Object -ExpandProperty Count) -gt 0) {
                                     $ReplaceList = [System.Collections.Generic.List[string]]::new()
@@ -339,10 +343,15 @@ function Read-MXRecord {
                                 # Set ExpectedInclude and Selector fields based on provider details
                                 $MXResults.ExpectedInclude = $ExpectedInclude
                                 $MXResults.Selectors = $Provider.Selectors
+                                $ProviderMatched = $true
+                                break
                             }
                         }
+                        catch {}
                     }
-                    catch {}
+                    if ($ProviderMatched) {
+                        break
+                    }
                 }
             }
         }
@@ -992,6 +1001,7 @@ function Read-DmarcPolicy {
                         }
                     }
                 }
+                if (!$DmarcAnalysis.ReportingEmails) { $DmarcAnalysis.ReportingEmails.Add($null) }
                 if ($ReportEmailsSet) {
                     $ValidationPasses.Add('Aggregate reports are being sent.') | Out-Null
                 }
